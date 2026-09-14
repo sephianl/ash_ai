@@ -204,9 +204,16 @@ defmodule AshAi.Tool.ReadPageTest do
       assert page["count"] == 2
     end
 
-    test "caps the requested limit at max_page_size", %{registry: registry} do
+    test "refuses a requested limit above max_page_size", %{registry: registry} do
+      assert {:error, message} =
+               registry["read_offset"].(%{"sort" => @sort, "limit" => 50}, context())
+
+      assert message =~ "maximum page size of 3"
+    end
+
+    test "serves a requested limit at max_page_size", %{registry: registry} do
       {:ok, json, _page} =
-        registry["read_offset"].(%{"sort" => @sort, "limit" => 50}, context())
+        registry["read_offset"].(%{"sort" => @sort, "limit" => 3}, context())
 
       page = Jason.decode!(json)
 
