@@ -168,11 +168,32 @@ defmodule AshAi.Test.Music.ArtistOban do
     update_timestamp :updated_at, public?: true
     attribute :name, :string, public?: true
     attribute :bio, :string, public?: true
+    attribute :label, :string, public?: true
+    attribute :play_count, :integer, public?: true
+  end
+
+  calculations do
+    calculate :has_bio, :boolean, expr(not is_nil(bio)) do
+      public? true
+    end
   end
 
   actions do
     default_accept [:*]
     defaults [:create, :read, :update, :destroy]
+  end
+
+  relationships do
+    has_many :labelmates, __MODULE__ do
+      source_attribute :label
+      destination_attribute :label
+    end
+  end
+
+  aggregates do
+    count :labelmate_count, :labelmates do
+      public? true
+    end
   end
 end
 
