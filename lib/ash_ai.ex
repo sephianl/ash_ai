@@ -169,7 +169,7 @@ defmodule AshAi do
       eligible =
         resource
         |> Ash.Resource.Info.fields(query_field_types(kind))
-        |> Enum.filter(&(&1.public? && eligible_query_field?(&1, kind)))
+        |> Enum.filter(&(&1.public? && eligible_query_field?(resource, &1, kind)))
 
       case allowed do
         nil ->
@@ -199,7 +199,7 @@ defmodule AshAi do
             !field.public? ->
               {:error, "`#{inspect(field_name)}` is not public, so it cannot be #{use}"}
 
-            !eligible_query_field?(field, kind) ->
+            !eligible_query_field?(resource, field, kind) ->
               {:error, "`#{inspect(field_name)}` cannot be #{use}"}
 
             true ->
@@ -216,11 +216,16 @@ defmodule AshAi do
     defp query_field_types(:sortable_fields), do: [:attributes, :calculations, :aggregates]
     defp query_field_types(_kind), do: [:attributes, :aggregates, :calculations]
 
-    defp eligible_query_field?(field, :filterable_fields),
+    defp eligible_query_field?(_resource, field, :filterable_fields),
       do: field.filterable? && AshAi.OpenApi.filterable_field?(field, nil)
 
-    defp eligible_query_field?(field, :sortable_fields), do: field.sortable?
-    defp eligible_query_field?(_field, :aggregatable_fields), do: true
+    # A field's own `sortable?` defaults to true on every calculation, but the data layer can
+    # only sort on one with an expression; sorting on any other raises mid-read.
+    # `Ash.Resource.Info.sortable?/2` is the check Ash applies itself
+    defp eligible_query_field?(resource, field, :sortable_fields),
+      do: Ash.Resource.Info.sortable?(resource, field.name)
+
+    defp eligible_query_field?(_resource, _field, :aggregatable_fields), do: true
 
     defp resource_module(resource) when is_atom(resource), do: resource
 

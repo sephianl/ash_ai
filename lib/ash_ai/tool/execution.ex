@@ -151,7 +151,12 @@ defmodule AshAi.Tool.Execution do
 
   defp run_read(resource, action, arguments, input, opts, nil, ctx) do
     ensure_allowed_fields!(ctx.filterable_fields, filter_fields(arguments["filter"]), "filter on")
-    ensure_allowed_fields!(ctx.sortable_fields, sort_fields(arguments["sort"]), "sort on")
+
+    ensure_allowed_fields!(
+      sortable_field_names(resource, ctx),
+      sort_fields(arguments["sort"]),
+      "sort on"
+    )
 
     sort = build_sort(arguments["sort"])
     limit = build_limit(arguments["limit"], action.pagination)
@@ -223,6 +228,14 @@ defmodule AshAi.Tool.Execution do
   end
 
   defp sort_fields(_sort), do: []
+
+  # Checked even without an allow-list: a calculation without an expression is not sortable,
+  # and sorting on one would otherwise raise mid-read instead of naming the field
+  defp sortable_field_names(resource, ctx) do
+    resource
+    |> AshAi.Tool.query_fields(:sortable_fields, ctx.sortable_fields)
+    |> Enum.map(& &1.name)
+  end
 
   # Accepts both the documented condition form and Ash's native filter input,
   # which the filter parameter also passes through to `Ash.Query.filter_input/2`
@@ -326,7 +339,8 @@ defmodule AshAi.Tool.Execution do
   defp fold_record(record, {scanned, groups}, fields, aggregate) do
     key = Enum.map(fields, &Map.get(record, &1.name))
 
-    {scanned + 1, Map.update(groups, key, first_tally(record, aggregate), &tally(record, &1, aggregate))}
+    {scanned + 1,
+     Map.update(groups, key, first_tally(record, aggregate), &tally(record, &1, aggregate))}
   end
 
   defp first_tally(record, aggregate), do: tally(record, {0, initial_state(aggregate)}, aggregate)
@@ -368,9 +382,7 @@ defmodule AshAi.Tool.Execution do
 
   defp ensure_foldable(kind, %{type: type, name: name}) when kind in [:sum, :avg] do
     if type not in [Ash.Type.Integer, Ash.Type.Float, Ash.Type.Decimal] do
-      throw(
-        {:tool_error, "#{kind} is not supported for #{name}, whose type is #{inspect(type)}"}
-      )
+      throw({:tool_error, "#{kind} is not supported for #{name}, whose type is #{inspect(type)}"})
     end
   end
 

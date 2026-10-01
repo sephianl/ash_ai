@@ -69,7 +69,8 @@ defmodule AshAi.Mcp.GroupByTest do
     Jason.decode!(response.resp_body)["result"]
   end
 
-  defp decoded(result), do: result["content"] |> List.first() |> Map.fetch!("text") |> Jason.decode!()
+  defp decoded(result),
+    do: result["content"] |> List.first() |> Map.fetch!("text") |> Jason.decode!()
 
   defp error_text(result) do
     assert result["isError"]
