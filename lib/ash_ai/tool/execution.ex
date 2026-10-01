@@ -148,6 +148,7 @@ defmodule AshAi.Tool.Execution do
       |> apply_select(ctx)
       |> Ash.Query.for_read(action.name, input, opts)
       |> reject_oversized_limit(arguments["limit"], action.pagination)
+      |> reject_unsortable_sort(arguments["sort"])
 
     page_opts = build_page_opts(action.pagination, limit, arguments)
 
@@ -180,6 +181,30 @@ defmodule AshAi.Tool.Execution do
   end
 
   defp build_sort(_), do: ""
+
+  defp reject_unsortable_sort(query, sort) when is_list(sort) do
+    sortable =
+      query.resource
+      |> AshAi.Tool.sortable_fields()
+      |> MapSet.new(&to_string(&1.name))
+
+    sort
+    |> Enum.map(& &1["field"])
+    |> Enum.reject(&MapSet.member?(sortable, &1))
+    |> Enum.reduce(query, fn field, query ->
+      Ash.Query.add_error(
+        query,
+        Ash.Error.Query.InvalidArgument.exception(
+          field: :sort,
+          value: field,
+          message:
+            "cannot sort on `#{field}`. Sort on one of #{Enum.join(Enum.sort(sortable), ", ")}"
+        )
+      )
+    end)
+  end
+
+  defp reject_unsortable_sort(query, _sort), do: query
 
   defp execute_grouped(query, group_by, result_type, ctx) do
     resource = query.resource
@@ -264,7 +289,8 @@ defmodule AshAi.Tool.Execution do
   defp fold_record(record, {scanned, groups}, fields, aggregate) do
     key = Enum.map(fields, &Map.get(record, &1.name))
 
-    {scanned + 1, Map.update(groups, key, first_tally(record, aggregate), &tally(record, &1, aggregate))}
+    {scanned + 1,
+     Map.update(groups, key, first_tally(record, aggregate), &tally(record, &1, aggregate))}
   end
 
   defp first_tally(record, aggregate), do: tally(record, {0, initial_state(aggregate)}, aggregate)
@@ -306,9 +332,7 @@ defmodule AshAi.Tool.Execution do
 
   defp ensure_foldable(kind, %{type: type, name: name}) when kind in [:sum, :avg] do
     if type not in [Ash.Type.Integer, Ash.Type.Float, Ash.Type.Decimal] do
-      throw(
-        {:tool_error, "#{kind} is not supported for #{name}, whose type is #{inspect(type)}"}
-      )
+      throw({:tool_error, "#{kind} is not supported for #{name}, whose type is #{inspect(type)}"})
     end
   end
 
