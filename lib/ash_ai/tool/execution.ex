@@ -148,6 +148,7 @@ defmodule AshAi.Tool.Execution do
       |> apply_select(ctx)
       |> Ash.Query.for_read(action.name, input, opts)
       |> reject_oversized_limit(arguments["limit"], action.pagination)
+      |> reject_unsortable_sort(arguments["sort"])
 
     page_opts = build_page_opts(action.pagination, limit, arguments)
 
@@ -365,6 +366,30 @@ defmodule AshAi.Tool.Execution do
   end
 
   defp reject_oversized_limit(query, _requested, _pagination), do: query
+
+  defp reject_unsortable_sort(query, sort) when is_list(sort) do
+    sortable =
+      query.resource
+      |> AshAi.Tool.sortable_fields()
+      |> MapSet.new(&to_string(&1.name))
+
+    sort
+    |> Enum.map(& &1["field"])
+    |> Enum.reject(&MapSet.member?(sortable, &1))
+    |> Enum.reduce(query, fn field, query ->
+      Ash.Query.add_error(
+        query,
+        Ash.Error.Query.InvalidArgument.exception(
+          field: :sort,
+          value: field,
+          message:
+            "cannot sort on `#{field}`. Sort on one of #{Enum.join(Enum.sort(sortable), ", ")}"
+        )
+      )
+    end)
+  end
+
+  defp reject_unsortable_sort(query, _sort), do: query
 
   defp build_limit(limit, pagination) do
     case {limit, pagination} do
