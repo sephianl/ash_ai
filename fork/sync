@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2024 ash_ai contributors <https://github.com/ash-project/ash_ai/graphs/contributors>
+#
+# SPDX-License-Identifier: MIT
+
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+git_dir=$(git rev-parse --git-dir)
+start_ref=refs/fork/sync-start
+
+if [ -d "$git_dir/rebase-merge" ] || [ -d "$git_dir/rebase-apply" ]; then
+  echo "A rebase is in progress. Resolve it, run 'git rebase --continue', then rerun fork/sync." >&2
+  exit 1
+fi
+
+if [ -n "$(git status --porcelain)" ]; then
+  echo "The working tree is not clean." >&2
+  exit 1
+fi
+
+git config rerere.enabled true
+git config rerere.autoupdate true
+
+git fetch upstream --tags
+git fetch origin
+git switch sephia
+
+if ! git rev-parse --verify --quiet "$start_ref" >/dev/null; then
+  git update-ref "$start_ref" HEAD
+fi
+
+git rebase upstream/main
+
+echo
+echo "Patches before and after the rebase:"
+git --no-pager range-diff upstream/main "$start_ref" HEAD
+
+MIX_ENV=test mix compile --warnings-as-errors
+mix test
+
+tag="sephia-$(date +%Y.%m.%d)"
+if git rev-parse --verify --quiet "refs/tags/$tag" >/dev/null; then
+  tag="$tag-$(git rev-parse --short HEAD)"
+fi
+git tag "$tag"
+git update-ref -d "$start_ref"
+git update-ref refs/heads/main upstream/main
+
+cat <<EOF
+
+Tagged $tag. Review the range-diff above, then publish:
+
+  git push origin upstream/main:main
+  git push --force-with-lease origin sephia
+  git push origin $tag
+
+and point zelo's mix.exs at: {:ash_ai, github: "sephianl/ash_ai", tag: "$tag"}
+EOF
