@@ -195,6 +195,19 @@ defmodule AshAi.Test.Music.ArtistOban do
     end
   end
 
+  relationships do
+    has_many :label_mates, __MODULE__ do
+      source_attribute :label
+      destination_attribute :label
+    end
+  end
+
+  aggregates do
+    count :label_mate_count, :label_mates do
+      public? true
+    end
+  end
+
   actions do
     default_accept [:*]
     defaults [:create, :read, :update, :destroy]

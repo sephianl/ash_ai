@@ -292,17 +292,18 @@ defmodule AshAi.Tool.Execution do
     end
 
     kind = String.to_existing_atom(kind)
+    {field_type, field_constraints} = lookup_field_type(resource, field.name)
 
-    ensure_foldable(kind, field)
+    ensure_foldable(kind, name, field_type)
 
-    case Ash.Query.Aggregate.kind_to_type(kind, field.type, field.constraints || []) do
+    case Ash.Query.Aggregate.kind_to_type(kind, field_type, field_constraints) do
       {:ok, type, constraints} ->
         %{kind: kind, field: field, type: type, constraints: constraints}
 
       _unsupported ->
         throw(
           {:tool_error,
-           "#{kind} is not supported for #{name}, whose type is #{inspect(field.type)}"}
+           "#{kind} is not supported for #{name}, whose type is #{inspect(field_type)}"}
         )
     end
   end
@@ -380,13 +381,13 @@ defmodule AshAi.Tool.Execution do
   defp compare_values(left, right) when left > right, do: :gt
   defp compare_values(_left, _right), do: :eq
 
-  defp ensure_foldable(kind, %{type: type, name: name}) when kind in [:sum, :avg] do
+  defp ensure_foldable(kind, name, type) when kind in [:sum, :avg] do
     if type not in [Ash.Type.Integer, Ash.Type.Float, Ash.Type.Decimal] do
       throw({:tool_error, "#{kind} is not supported for #{name}, whose type is #{inspect(type)}"})
     end
   end
 
-  defp ensure_foldable(_kind, _field), do: :ok
+  defp ensure_foldable(_kind, _name, _type), do: :ok
 
   defp add_values(%Decimal{} = left, right), do: Decimal.add(left, Decimal.new(to_string(right)))
   defp add_values(left, %Decimal{} = right), do: Decimal.add(Decimal.new(to_string(left)), right)

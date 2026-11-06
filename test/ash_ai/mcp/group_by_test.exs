@@ -188,4 +188,39 @@ defmodule AshAi.Mcp.GroupByTest do
              %{"group" => %{"has_bio" => true}, "count" => 2, "value" => 70}
            ]
   end
+
+  test "a count aggregate can be summed per group, though it declares no type" do
+    result =
+      call(%{
+        "group_by" => ["label"],
+        "result_type" => %{"aggregate" => "sum", "field" => "label_mate_count"}
+      })
+
+    refute result["isError"]
+
+    assert decoded(result) == [
+             %{"group" => %{"label" => "blue"}, "count" => 3, "value" => 9},
+             %{"group" => %{"label" => "red"}, "count" => 1, "value" => 1}
+           ]
+  end
+
+  test "a count aggregate can be grouped by" do
+    result = call(%{"group_by" => ["label_mate_count"], "result_type" => "count"})
+
+    refute result["isError"]
+
+    assert decoded(result) == [
+             %{"group" => %{"label_mate_count" => 1}, "count" => 1},
+             %{"group" => %{"label_mate_count" => 3}, "count" => 3}
+           ]
+  end
+
+  test "a count aggregate can be summed across the whole result" do
+    result =
+      call(%{"result_type" => %{"aggregate" => "sum", "field" => "label_mate_count"}})
+
+    refute result["isError"]
+
+    assert decoded(result) == 10
+  end
 end
