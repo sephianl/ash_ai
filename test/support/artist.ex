@@ -2,6 +2,19 @@
 #
 # SPDX-License-Identifier: MIT
 
+defmodule AshAi.Test.Music.BioWordCount do
+  @moduledoc false
+  use Ash.Resource.Calculation
+
+  @impl true
+  def load(_query, _opts, _context), do: [:bio]
+
+  @impl true
+  def calculate(records, _opts, _context) do
+    Enum.map(records, &length(String.split(&1.bio || "")))
+  end
+end
+
 defmodule AshAi.Test.Music.ArtistAfterAction do
   @moduledoc false
   use Ash.Resource,
@@ -168,11 +181,40 @@ defmodule AshAi.Test.Music.ArtistOban do
     update_timestamp :updated_at, public?: true
     attribute :name, :string, public?: true
     attribute :bio, :string, public?: true
+    attribute :label, :string, public?: true
+    attribute :play_count, :integer, public?: true
+  end
+
+  calculations do
+    calculate :has_bio, :boolean, expr(not is_nil(bio)) do
+      public? true
+    end
+
+    calculate :bio_word_count, :integer, AshAi.Test.Music.BioWordCount do
+      public? true
+    end
+  end
+
+  relationships do
+    has_many :label_mates, __MODULE__ do
+      source_attribute :label
+      destination_attribute :label
+    end
+  end
+
+  aggregates do
+    count :label_mate_count, :label_mates do
+      public? true
+    end
   end
 
   actions do
     default_accept [:*]
     defaults [:create, :read, :update, :destroy]
+
+    read :paged do
+      pagination required?: false, keyset?: true, max_page_size: 5
+    end
   end
 end
 
